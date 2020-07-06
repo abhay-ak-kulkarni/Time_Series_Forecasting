@@ -1,0 +1,745 @@
+---
+title: "Time Series Forecasting"
+author: "Abhay Kulkarni"
+date: "9/21/2019"
+output:
+  pdf_document: 
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    latex_engine: lualatex
+  github_document: default
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+header-includes:
+- \usepackage{titling}
+- \pretitle{\begin{center}\LARGE\includegraphics[height=20cm]{FINAL.jpg}\\[\bigskipamount]}
+- \posttitle{\end{center}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+\newpage
+
+
+# Introduction
+
+## What is **Time Series?**   
+      
+         
+A time series is a series of data points **indexed in time order**. Most commonly, a time series is a **sequence taken at successive equally spaced points in time**.   
+
+## Why **forecast** Time Series?    
+      
+ <p>If there’s one thing today’s planners and managers wish they had to ensure their planning and production strategies, it would be a crystal ball. A magical ability to glimpse into the future in order to cut the complexity and uncertainty of modern manufacturing and provide a path of stability and certainty in a variant-rich value stream. </p>   
+    
+    
+ 
+ <p> Forecasting. Or, in other words, the ability to see into the future and make educated predictions about any number of production elements such as material sourcing, job allocation, transport logistics, and more. In fact, forecasting is such an increasingly valuable proposition for manufacturing companies that an August 2016 study by Gartner indicated forecasting (and the accuracy thereof) and production variability were two of the greatest obstacles manufacturing companies when overseeing their supply streams. </p>   
+    
+     
+ <p> Forecasting gives companies the ability to see into the future to avoid this hypothetical accident via more effective production scheduling to meet customer demands and market forces, and to align with the availability of raw materials and component parts. Because forecasting gives manufacturing companies a leg-up on these elements of planning and production cycles, companies can operate with more agility, transparency, and flexibility to adapt to changing production environments or schemes.</p>    
+      
+          
+ 
+ \newpage            
+             
+# Project Objective   
+     
+        
+Explore the gas (Australian monthly gas production)  dataset in Forecast package to do the following : </p>
+
+## To do the following :   
+   
+  * Read the data as a time series object in R. Plot the data
+  * What do you observe? Which components of the time series are present in this dataset?
+  * What is the periodicity of dataset?
+  * Is the time series Stationary? Inspect visually as well as conduct an ADF test? Write down the null and alternate hypothesis for the stationarity test? De-seasonalise the series if seasonality is present?
+  * Develop an ARIMA Model to forecast for next 12 periods. Use both manual and auto.arima (Show & explain all the steps)
+  * Report the accuracy of the model   
+      
+          
+             
+             
+\newpage
+# Libraries/ Packages
+
+
+```{r warning=FALSE}
+library("forecast")
+library("ggplot2")
+library("tseries")
+library(MLmetrics)
+library(cowplot)
+library(DataExplorer)
+```
+
+\newpage
+
+
+
+# Speeding Processor Cores
+
+```{r}
+library(parallel)
+library(doParallel)
+clusterforspeed <- makeCluster(detectCores() - 1) ## convention to leave 1 core for OS
+registerDoParallel(clusterforspeed)
+```
+
+
+
+\newpage
+
+# Step by Step Approach   
+   
+      
+## Set Working Directory
+
+```{r}
+setwd("H:\\Github PROJECTS\\Time Series Forecasting\\Time_Series_Forecasting")
+getwd()
+
+```
+
+   
+       
+           
+## Read Australian Monthly Gas 
+
+```{r}
+head(gas)
+tail(gas)
+frequency(gas)
+
+```
+
+**Findings**      
+   
+Periodicity of dataset is  **Monthly data from 1956 to 1995**    
+    
+        
+           
+## Import Data as Time Series Data    
+     
+```{r}
+rawdata<- ts(gas, start = c(1956,1), end = c(1995), frequency = 12)
+
+head(rawdata)
+tail(rawdata)
+```
+     
+
+## Create backup of the raw time series and converting Rawdata to data frame  
+   
+```{r}
+backupdata<- rawdata
+rawdata<- ts(gas, start = c(1956,1), end = c(1995), frequency = 12)
+class(rawdata)
+```
+
+**NOTE**   
+   
+     
+Created backup of time series dataset.      
+     
+\newpage
+
+## Components of TIME SERIES
+![Components of TIME SERIES ](Time Series Components.jpg)
+    
+       
+\newpage
+## Steps to build ARIMA Time Series Model
+
+![Steps to build ARIMA Time Series Model ](TimeSeries FLOW.png)
+
+
+
+## Checking for **Missing Values**      
+
+```{r}
+plot_missing(as.data.frame(rawdata))
+```         
+
+
+**Findings**    
+  
+There is **No Missing** Values in the Dataset     
+    
+       
+
+## Data visualisations           
+```{r}
+reg_production <- lm(rawdata ~ time(rawdata))
+plot(rawdata, main = "Monthly Production of Gas")
+abline(reg_production, col = "blue")
+```
+
+
+## Seasonal Plot
+```{r}
+seasonplot <- ggseasonplot(rawdata)
+
+
+
+seasonplot+ labs(title = "Seasonal plot of Australian Gas Production by Year")
+```
+
+
+**Findings** : 
+
+The above plot clearly indicates there is **NO trend from 1956 to 1970**. However, **From 1970 to 1995 there is increase in trend**. Year 1990 March has the highest production.The production peaks during the month of July and August.  And a general high production  is seen for the month of April, May, June,July and August.    
+   
+   
+        
+        
+           
+## Aggregate the cycles and display a year on year trend     
+     
+```{r}
+plot(aggregate(rawdata,FUN=mean))
+```       
+**Findings**   
+   
+This supports our previous findings. The trend clearly starts increasing from 1970
+
+
+## Box plots across the months 
+
+```{r}
+
+    
+ boxplot(rawdata ~ cycle(rawdata), names = month.abb, col = "light blue", 
+        main = "Box Plots across the months")
+
+
+ ggsubseriesplot(rawdata)
+
+
+
+
+```
+
+
+**Findings** 
+
+* The horizontal lines indicate the means for each month. This form of plot enables the underlying seasonal pattern to be seen clearly, and also shows the changes in seasonality over time. It is especially useful in identifying changes within particular seasons.  Also, we see variance in the dataset. Variance is also the HIGHEST in JULY month.      
+     
+* The mean value of June,July and August is higher than the other months indicating seasonality.
+
+* The variance and the mean value in June, July and August is much higher than rest of the months.
+
+* Exploring data becomes most important in a time series model – without this exploration, you will not know whether a series is stationary or not. As in this case we already know many details about the kind of model we are looking out for.
+
+* There is clear indication of Trend and Season component.   
+    
+      
+
+
+##  Decompose data to look at the various components
+```{r}
+decomp1 <- stl(rawdata, s.window = 'periodic')
+
+plot(decomp1)
+```
+
+
+
+ ## Lets try to Decompose data with window as 3
+ 
+```{r}
+decomp3 <- stl(rawdata, s.window = 3)
+
+plot(decomp3)
+```
+ 
+
+
+
+ ## Lets try to Decompose data with window as 5
+ 
+```{r}
+decomp5 <- stl(rawdata, s.window = 5)
+
+plot(decomp5)
+```
+
+
+
+**Findings** 
+
+* Decompose data with window as 'Periodic' looks smoother(Trend)   
+     
+\newpage       
+## Stationary VS Non Stationary    
+
+![Stationary VS Non Stationary ](stationary.png){width=70%}
+There are three basic criterion for a series to be classified as stationary series :
+
+1. The mean of the series should not be a function of time rather should be a constant. The image below has the left hand graph satisfying the condition whereas the graph in red has a time dependent mean.   
+   
+2. The variance of the series should not a be a function of time. This property is known as homoscedasticity. Following graph depicts what is and what is not a stationary series. (Notice the varying spread of distribution in the right hand graph)   
+   
+3. The covariance of the i th term and the (i + m) th term should not be a function of time. In the following graph, you will notice the spread becomes closer as the time increases. Hence, the covariance is not constant with time for the ‘red series’.
+
+
+
+\newpage
+
+##  De-seasonalize the data
+```{r}
+deseasoned_production <- seasadj(decomp1)
+plot(deseasoned_production)
+abline(lm(deseasoned_production ~ time(deseasoned_production)), col = "blue")
+deseasoned_production
+
+```
+
+
+
+## Check for stationarityof the original dataset
+```{r}
+# Dickey-Fuller test
+adf.test(rawdata, alternative = "stationary")
+```
+
+
+
+**Findings** 
+
+* Null Hypothesis (H0): If accepted, it suggests the time series has a unit root, meaning it is non-stationary. It has some time dependent structure.
+Alternate Hypothesis (H1): The null hypothesis is rejected; it suggests the time series does not have a unit root, meaning it is stationary. It does not have time-dependent structure.
+
+* We fail to reject the Null hypothesis. This is a NON STATIONARY DATA    
+    
+        
+## ACF and PACF plots - on the non-stationary data(Original)
+
+![ACF ](ACF.jpg){width=50%}
+![PACF ](PACF.jpg){width=50%}
+```{r}
+acf(rawdata)
+pacf(rawdata)
+```
+
+
+**Findings**     
+   
+* Clearly, the decay of ACF chart is very slow, which means that the population is not stationary. Let’s see how ACF and PACF curve come out after regressing on the difference.
+
+ 
+    
+ 
+ 
+## Check for stationarity of the deseasoned series dataset
+```{r}
+# Dickey-Fuller test
+adf.test(deseasoned_production, alternative = "stationary")
+```
+ 
+ **Findings**     
+   
+* Fail to reject de-seasonal data. Have to De-Trend(Difference) further.
+
+
+
+
+      
+##  Differencing the time series data - to remove the trend
+
+
+```{r}
+detrended_production = diff(deseasoned_production, differences = 1)
+plot(detrended_production)
+
+
+```
+
+
+
+ 
+## Check for Stationarity 
+```{r}
+# Dickey-Fuller test
+adf.test(detrended_production, alternative = "stationary")
+```
+
+ **Findings**     
+   
+* We reject Null Hypothesis and go with Alternative Hypothesis. Time Serie data is NOW STATIONARY
+
+
+## ACF and PACF plots - on differenced TS
+```{r}
+acf(detrended_production, main = "ACF for differenced series")
+pacf(detrended_production, main = "PACF for differenced series")
+```
+
+ **Findings**     
+   
+* Clearly, ACF plot cuts off after the 2 lag. So, q will be 2 and PACF cuts off at 2 aswell. q also will be 2 and d will be 1 as we differenced our time series data once.
+
+
+
+# Split the Dateset into Training Set and Test Set
+```{r}
+production_train <- window(deseasoned_production, start=1956, end = c(1988))
+production_test <- window(deseasoned_production, start = 1989)
+str(production_train)
+str(production_test)
+```
+
+
+\newpage
+## Build the ARIMA model
+![ARIMA (p,d,q) ](pdq.jpg)
+
+
+```{r}
+productionARIMA1 <- arima(production_train, order = c(2, 1, 2)) 
+productionARIMA1
+tsdisplay(residuals(productionARIMA1), lag.max = 15, main = "Model Residuals")
+
+```
+
+
+
+## Fitting with Auto ARIMA
+```{r}
+fitautoarima <- auto.arima(production_train, seasonal = FALSE)
+fitautoarima
+tsdisplay(residuals(fitautoarima), lag.max = 45, main = "Auto ARIMA Model Residuals")
+```
+
+
+## Ljung - Box Test - Residual Analysis
+Ho: Residuals are independent
+Ha: Residuals are not independent
+
+```{r}
+Box.test(productionARIMA1$residuals)
+
+
+```
+ **Findings**     
+   
+* Residuals are independednt. They follow normal distribution. Clearly, we can use productionARIMA1(VALID)
+
+```{r}
+Box.test(fitautoarima$residuals)
+```
+
+
+
+
+ **Findings**     
+   
+* Residuals are independednt. They follow normal distribution. Clearly, we can use fitautoarima(VALID)
+
+
+
+##  Forecasting with the ARIMA model
+```{r}
+fcastproduction1 = forecast(productionARIMA1, h=72)
+fcastproduction1
+
+
+hist(fcastproduction1$residuals)
+plot(fcastproduction1$x,col="blue", main= "Production: Actual vs Forecast") 
+lines(fcastproduction1$fitted,col="red")
+```
+
+
+## Forecasting with the AUTO ARIMA model
+```{r}
+fcast_autoArima = forecast(fitautoarima, h=72)
+plot(fcast_autoArima)
+
+
+plot(fcast_autoArima$x,col="blue", main= "production A: Actual vs Forecast") 
+lines(fcast_autoArima$fitted,col="red")
+```
+
+
+## compute accuracy of the forecast - on the test data
+```{r}
+accuracy(fcastproduction1, production_test)
+```
+
+## compute accuracy of the forecast AUTO ARIMA - on the test data
+
+```{r}
+AccuracyautoARIMA <- accuracy(fcast_autoArima, production_test)
+AccuracyautoARIMA
+
+```
+
+
+             
+             
+
+
+## Let's try other values and try to reduce error
+
+```{r}
+productionARIMA2 <- arima(production_train, order = c(2, 2, 1)) 
+productionARIMA2
+tsdisplay(residuals(productionARIMA2), lag.max = 15, main = "Model Residuals")
+
+```
+
+```{r}
+Box.test(productionARIMA2$residuals)
+```
+
+
+ **Findings**     
+   
+* Residuals are independent. They follow normal distribution. Clearly, we can use productionARIMA2(VALID)
+
+##  Forecasting with the ARIMA2 model
+```{r}
+fcastproduction2 = forecast(productionARIMA2, h=72)
+fcastproduction2
+plot(fcastproduction2)
+
+hist(fcastproduction2$residuals)
+```
+
+
+## compute accuracy of the forecast - on the test data
+```{r}
+accuracy(fcastproduction2, production_test)
+
+plot(fcastproduction2$x,col="blue", main= "production A: Actual vs Forecast") 
+lines(fcastproduction2$fitted,col="red")
+
+```
+
+## Let's try other values and try to reduce error
+
+```{r}
+productionARIMA3 <- arima(production_train, order = c(2, 2, 2)) 
+productionARIMA3
+tsdisplay(residuals(productionARIMA3), lag.max = 15, main = "Model Residuals")
+
+```
+
+
+
+
+```{r}
+Box.test(productionARIMA3$residuals)
+```
+
+
+ **Findings**     
+   
+* Residuals are independent. They follow normal distribution. Clearly, we can use productionARIMA3(VALID)
+
+
+
+##  Forecasting with the ARIMA3 model
+```{r}
+fcastproduction3 = forecast(productionARIMA3, h=72)
+fcastproduction3
+plot(fcastproduction3)
+
+hist(fcastproduction3$residuals)
+```
+
+
+
+
+## compute accuracy of the forecast - on the test data
+```{r}
+accuracy(fcastproduction3, production_test)
+
+plot(fcastproduction3$x,col="blue", main= "production A: Actual vs Forecast") 
+lines(fcastproduction3$fitted,col="red")
+
+```
+
+
+
+## Let's try other values and try to reduce error
+
+```{r}
+productionARIMA4 <- arima(production_train, order = c(1, 2, 3)) 
+productionARIMA4
+tsdisplay(residuals(productionARIMA4), lag.max = 15, main = "Model Residuals")
+
+```
+
+
+
+
+```{r}
+Box.test(productionARIMA4$residuals)
+```
+
+
+ **Findings**     
+   
+* Residuals are independent. They follow normal distribution. Clearly, we can use productionARIMA4(VALID)
+
+
+##  Forecasting with the ARIMA4 model
+```{r}
+fcastproduction4 = forecast(productionARIMA4, h=72)
+fcastproduction4
+plot(fcastproduction4)
+
+hist(fcastproduction4$residuals)
+
+
+plot(fcastproduction4$x,col="blue", main= "production A: Actual vs Forecast") 
+lines(fcastproduction4$fitted,col="red")
+```
+
+## compute accuracy of the forecast productionARIMA4- on the test data
+
+```{r}
+accuracy(fcastproduction4, production_test)
+
+```
+
+
+
+
+
+## Building Auto ARIMA with season component
+
+
+```{r}
+
+fitautoarima2 <- auto.arima(production_train, seasonal = TRUE)
+fitautoarima2
+tsdisplay(residuals(fitautoarima2), lag.max = 45, main = "Auto ARIMA Model Residuals")
+```
+
+
+
+```{r}
+Box.test(fitautoarima2$residuals)
+```
+
+
+
+
+ **Findings**     
+   
+* Residuals are independednt. They follow normal distribution. Clearly, we can use fitautoarima2(VALID)
+
+
+
+
+
+
+## Forecasting with the AUTO ARIMA model2
+```{r}
+fcast_autoArima2 = forecast(fitautoarima2, h=72)
+plot(fcast_autoArima2)
+
+
+plot(fcast_autoArima2$x,col="blue", main= "production A: Actual vs Forecast") 
+lines(fcast_autoArima2$fitted,col="red")
+
+
+hist(fcast_autoArima2$residuals)
+```
+
+
+
+
+## compute accuracy of the forecast AUTO ARIMA - on the test data
+
+```{r}
+AccuracyautoARIMA2 <- accuracy(fcast_autoArima2, production_test)
+AccuracyautoARIMA2
+
+```
+
+
+
+| Models           	| RMSE     	| MAE       	| MPE        	| MAPE      	| MASE      	|
+|------------------	|----------	|-----------	|------------	|-----------	|-----------	|
+| fcastproduction1 	| 8843.112 	| 7486.108  	| 14.550004  	| 15.21109  	| 5.0393032 	|
+| fcastproduction2 	| 6842.67  	| 5282.371  	| 8.141509   	| 10.72073  	| 3.5558491 	|
+| fcastproduction3 	| 6694.167 	| 5158.713  	| 7.612082   	| 10.48553  	| 3.4726083 	|
+| fcastproduction4 	| 6419.023 	| 4920.194  	| 6.566698   	| 10.03427  	| 3.3120482 	|
+| fcast_autoArima  	| 5433.903 	| 4291.068  	| 1.194270   	| 9.269967  	| 2.888549  	|
+| fcast_autoArima2 	| 7655.097 	| 6439.0360 	| 13.1634216 	| 14.424347 	| 4.3344626 	|
+
+
+
+ **Conculsion**    
+    
+1) Looking at the error score above(RMSE, MAE), we can see that Auto Arima(fcast_autoArima ARIMA(1,1,3) with drift) is performing the best. 
+
+2) fcastproduction4 is the second best. ARIMA c(1, 2, 3)).
+
+3) 
+
+
+
+
+
+
+
+
+## Forecast Future values
+
+```{r}
+futureforecast <- auto.arima(production_train, seasonal = FALSE)
+futureforecast
+tsdisplay(residuals(futureforecast), lag.max = 15, main = "Auto ARIMA Model Residuals")
+
+
+
+```
+
+
+
+
+```{r}
+Box.test(futureforecast$residuals)
+```
+
+
+ **Findings**     
+   
+* Residuals are independent. They follow normal distribution. Clearly, we can use futureforecast(VALID)
+
+
+##  Forecasting with the ARIMA4 model
+```{r}
+futureforecastodel = forecast(futureforecast, h=107)
+futureforecastodel
+plot(futureforecastodel)
+
+hist(futureforecastodel$residuals)
+
+
+
+```
+
+## With 95 percent confidence. The future forecasted production till December 1996 (One Year or 12 months beyond available data.   
+
+
+```{r}
+tail(futureforecastodel$mean,n=12)
+```
+
+ **Findings**     
+   
+* 1 Year forecast of Australian Gas Production will help Australian Gas company to estimate the customers needs and preferences along with competitors' strategy in the future. So, production forecasting is an estimation of a wide range of future events, which affect the production of the organization. Elements of planning and production cycles, companies can operate with more agility, transparency, and flexibility to adapt to changing production environments or schemes.
+
+
+
